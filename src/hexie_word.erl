@@ -1,6 +1,14 @@
 -module(hexie_word).
-% -exprot([new/0, new/1, insert/2, filter/2, check/2]).
--compile(export_all).
+
+-export([new/0, 
+		new/1, 
+		insert/2, 
+		filter/2, 
+		load/2, 
+		from_file/1,
+		from_file/2]).
+% -export([check/2]).
+
 -define(MASK, $*).
 
 -record(node, {
@@ -28,6 +36,21 @@
 	wording_break = ""
 }).
 
+from_file(Fn) ->
+	from_file(Fn, ?MASK).
+
+from_file(Fn, Mask) ->
+	{ok, F} = file:open(Fn, read),
+	Lines = read_lines(F, []),
+	load(Lines, Mask).
+	% Lines = read_lines(F, []).
+
+
+load(Words, Mask) ->
+	lists:foldl(fun(W, D) ->
+					insert(W, D)
+				end, new(Mask), Words).
+
 new(Mask) ->
 	#hxdict{mask = Mask}.
 
@@ -35,6 +58,8 @@ new() ->
 	new(?MASK).
 
 %%
+insert([], Dict) ->
+	Dict;
 insert([_ | _] = Sentence, #hxdict{book = Book, tree = Tree} = Dict) ->
 	Book1 = dict:store(Sentence, true, Book),
 	Dict#hxdict{book = Book1, tree = insert1(Sentence, Tree)}.
@@ -73,7 +98,8 @@ filter1([], #node{children = Cs, leaf = Leaf},
 	lists:reverse(lists:append(make_mask(?MASK, Word), Sen));
 
 filter1([], _, #state{wording = Word, sentence = Sen}) ->
-	lists:reverse(Word, Sen);
+	% lists:reverse(Word, Sen);
+	Word ++ Sen;
 
 filter1([W | T] = _Sent, #node{children = Cs} = _Node, 
 		#state{topnode = TopNode, wording = Word, sentence = Sent} = State) ->
@@ -120,7 +146,32 @@ mark_stop(W, T, #state{wording = Word, sentence = Sent} = State) ->
 				sentence_break = Sent,
 				wording = Word2,
 				% sentence = [W | Sent],
-				tail = T}. 
+				tail = T
+			}.
+
+%%%%%
+read_lines(F, Acc) ->
+	case file:read_line(F) of
+		eof ->
+			lists:reverse(Acc);
+		{ok, []} ->
+			read_lines(F, Acc);
+		{ok, Line} ->
+			Sec = unicode:characters_to_list(list_to_binary(remove_n(Line))),
+			read_lines(F, [Sec | Acc])
+
+	end.
+
+remove_n(L) ->
+	remove_n(L, "").
+
+remove_n([], Acc) ->
+	lists:reverse(Acc);
+remove_n("\n", Acc) ->
+	lists:reverse(Acc);
+remove_n([C | T], Acc) ->
+	remove_n(T, [C | Acc]).
+
 
 %%test
 test() ->
@@ -142,4 +193,7 @@ test() ->
 
 	S4 = filter("abcd123wwwxxxabcdefeee", D),
 	io:format("~p ~n", [S4]),
+
+	S5 = filter("33333333", D),
+	io:format("~p ~n", [S5]),
 	ok.
